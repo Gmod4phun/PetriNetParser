@@ -13,3 +13,4 @@ Usage
 -
 
 - Calculates the Input, Output and Incidence matrices
+- Calculates the Reachability Graph
