@@ -1,24 +1,41 @@
 # PetriNetParser
 
-# make sure you have 'numpy' installed as is is required for matrices
+# make sure you have 'numpy' installed as it is required for matrices
 # https://numpy.org/install/
 # cmd: pip install numpy
 
-import xml.etree.ElementTree as et
 import numpy as np
-import sys, os.path
+import networkx as nx
+import matplotlib.pyplot as plt
+from networkx.drawing.nx_agraph import write_dot
+
+import xml.etree.ElementTree as et
+import sys
+import os.path
+
+import petrinet_reachability_graph as reachability_graph
+import markup_parser
+
 
 # classes
 class Place:
-    def __init__(self, id, label):
+    def __init__(self, id, label, tokens=0, static=False):
         self.id = id
         self.label = label
+        self.tokens = tokens
+        self.static = static
 
     def getId(self):
         return self.id
 
     def getLabel(self):
         return self.label
+
+    def getTokens(self):
+        return self.tokens
+
+    def isStatic(self):
+        return self.isStatic
 
 
 class Transition:
@@ -60,6 +77,9 @@ class Net:
         self.places = []
         self.transitions = []
         self.arcs = []
+        self.inputMatrix = None
+        self.outputMatrix = None
+        self.incidenceMatrix = None
 
     def addPlace(self, place):
         self.places.append(place)
@@ -170,6 +190,35 @@ class Net:
             print(transition.getLabel(), end=" ")
         print()
 
+    def getGraphState(self):
+        graphState = []
+        for p in self.getPlaces():
+            graphState.append(p.getTokens())
+        return graphState
+
+    def isTransitionRunnableFromState(self, transition, graphState):
+        transitionIndex = self.getTransitions().index(transition)
+        inputColumn = self.inputMatrix[:, transitionIndex]
+        curGraphState = graphState
+
+        isRunnable = True
+        for i in range(len(curGraphState)):
+            available = int(curGraphState[i])
+            required = int(inputColumn[i])
+            if available < required:
+                isRunnable = False
+                break
+        return isRunnable
+
+    def runTransition(self, transition, graphState):
+        transitionIndex = self.getTransitions().index(transition)
+        incidenceColumn = self.incidenceMatrix[:, transitionIndex]
+
+        newGraphState = list(graphState)
+        for place in net.getPlaces():
+            placeIndex = self.getPlaces().index(place)
+            newGraphState[placeIndex] += int(incidenceColumn[placeIndex])
+        return newGraphState
 
 # program
 
@@ -179,8 +228,9 @@ tArgs = sys.argv
 if len(tArgs) == 2:
     file = tArgs[1]
 else:
-    input("Error: No input file provided. Press ENTER to exit...")
-    sys.exit(0)
+    # input("Error: No input file provided. Press ENTER to exit...")
+    # sys.exit(0)
+    file = r"F:\School\FEI\DUS\siete\dus_zapocet1_10_siet_graf_dosiahnutelnosti.xml"
 
 if os.path.exists(file) and os.path.isfile(file):
     print("Parsing file:", file)
@@ -203,7 +253,9 @@ net = Net()
 for type_tag in root.findall(prefix + "place"):
     id = type_tag.find('id').text
     label = type_tag.find('label').text
-    net.addPlace(Place(id, label))
+    tokens = int(type_tag.find('tokens').text)
+    static = type_tag.find('static').text
+    net.addPlace(Place(id, label, tokens, static))
 
 for type_tag in root.findall(prefix + "transition"):
     id = type_tag.find('id').text
@@ -291,4 +343,64 @@ print(outputMatrix)
 print("\nIncidence matrix C = O - I:")
 print(incidenceMatrix)
 
-input("\nFinished, press ENTER to exit...")
+net.inputMatrix = inputMatrix
+net.outputMatrix = outputMatrix
+net.incidenceMatrix = incidenceMatrix
+
+
+# build reachability graph
+f = open("reachability_graph.txt", "w")
+G = nx.DiGraph()
+
+graph = reachability_graph.Graph()
+baseNode = graph.addNode(net.getGraphState())
+
+G.add_node(baseNode.getName())
+
+while True:
+    allChecked = True
+    for curNode in graph.nodes:
+        if not curNode.isChecked:
+            allChecked = False
+            break
+
+    if allChecked:
+        break
+
+    for curNode in graph.nodes:
+        if not curNode.isChecked:
+            for trans in net.getTransitions():
+                if net.isTransitionRunnableFromState(trans, curNode.state):
+                    newState = net.runTransition(trans, curNode.state)
+                    newNode = graph.getNodeWithState(newState) if graph.hasNodeWithState(newState) else graph.addNode(newState, curNode)
+                    G.add_edge(curNode.getName(), newNode.getName(), edgeLabel=trans.getLabel())
+                    f.write(f"{curNode.getName()} {newNode.getName()} {trans.getLabel()}\n")
+            curNode.isChecked = True
+f.close()
+
+print("Open 'reachability_graph.txt' and copy the data into https://csacademy.com/app/graph_editor/")
+print("Config -> Run Command -> Arrange as tree, then arrange the graph as needed")
+print("Generate Markup, copy the data into 'graph_markup_input.txt and save it, then press ENTER to continue'")
+input("\nAfter writing data to the file, press ENTER to continue...")
+
+
+color_map = []
+for node in G:
+    if len(color_map) == 0:
+        color_map.append('lightgreen')
+    else:
+        color_map.append('lightblue')
+
+
+print("Plotting Reachability Graph...")
+params = {"with_labels": True, "arrows": True, "node_color": color_map, "node_size": 6000, "labels": graph.buildNodeLabelDict()}
+pos = markup_parser.parseDictFromFile("graph_markup_input.txt")
+
+plt.title("Reachability Graph")
+nx.draw(G, pos, **params)
+labels = nx.get_edge_attributes(G, "edgeLabel")
+formatted_edge_labels = {(elem[0], elem[1]): labels[elem] for elem in labels}
+nx.draw_networkx_edge_labels(G, pos, edge_labels=formatted_edge_labels)
+plt.show()
+
+# input("\nFinished, press ENTER to exit...")
