@@ -11,12 +11,13 @@ class Node:
         return self.predcessorNode
 
     def setupAllPredcessorNodes(self):
-        allNodes = []
-        curNode = self.getPredcessorNode()
-        while (curNode != None):
-            allNodes.append(curNode)
-            curNode = curNode.getPredcessorNode()
-        return allNodes
+        if self.getPredcessorNode() is None:
+            return []
+        else:
+            allNodes = list(self.getPredcessorNode().getAllPredcessorNodes())
+            if self.getPredcessorNode() not in allNodes:
+                allNodes.append(self.getPredcessorNode())
+            return sorted(allNodes, key=lambda item: item.id, reverse=True)
 
     def getAllPredcessorNodes(self):
         return self.predcessors
@@ -29,6 +30,15 @@ class Node:
         for node in self.getAllPredcessorNodes():
             allNames.insert(0, node.getName())
         return allNames
+
+    def mergePredcessorNodesFrom(self, predNode):
+        own = list(self.getAllPredcessorNodes())
+        for node in predNode.getAllPredcessorNodes():
+            if node not in own:
+                own.append(node)
+        if predNode not in own:
+            own.append(predNode)
+        self.predcessors = sorted(own, key=lambda item: item.id, reverse=True)
 
     def getGraphLabel(self):
         return f"{self.getName()}\n{self.state}\n({self.getAllPredcessorNames()})"

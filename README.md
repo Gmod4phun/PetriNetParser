@@ -3,6 +3,13 @@
 
 Requires **NumPy**: https://github.com/numpy/numpy - https://numpy.org/install/
 
+*Requires the following Python packages*
+-
+
+- **numpy**
+- **networkx**
+- **matplotlib**
+
 Usage
 -
 
@@ -13,4 +20,4 @@ Usage
 -
 
 - Calculates the Input, Output and Incidence matrices
-- Calculates the Reachability Graph
+- Calculates the Reachability Graph (if possible)

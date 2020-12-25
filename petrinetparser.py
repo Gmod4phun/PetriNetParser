@@ -7,14 +7,12 @@
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-from networkx.drawing.nx_agraph import write_dot
 
 import xml.etree.ElementTree as et
 import sys
 import os.path
 
-import petrinet_reachability_graph as reachability_graph
-import markup_parser
+from petrimodules import petrigraph, markup_parser
 
 
 # classes
@@ -129,12 +127,15 @@ class Net:
                 return obj
         return None
 
+    # def sortObjectsByLabel(self, arr):
+    #     n = len(arr)
+    #     for i in range(n - 1):
+    #         for j in range(0, n - i - 1):
+    #             if arr[j].getLabel() > arr[j + 1].getLabel():
+    #                 arr[j], arr[j + 1] = arr[j + 1], arr[j]
+
     def sortObjectsByLabel(self, arr):
-        n = len(arr)
-        for i in range(n - 1):
-            for j in range(0, n - i - 1):
-                if arr[j].getLabel() > arr[j + 1].getLabel():
-                    arr[j], arr[j + 1] = arr[j + 1], arr[j]
+        arr = sorted(arr, key=lambda item: item.getLabel(), reverse=True)
 
     def sortPlacesByPattern(self, pattern):
         newObjects = []
@@ -210,6 +211,15 @@ class Net:
                 break
         return isRunnable
 
+    def isState2GreaterThan1(self, state1, state2):
+        # returns True if state2 is greater, otherwise returns False
+        if state1 == state2:
+            return False
+        for i in range(len(state1)):
+            if state1[i] > state2[i]:
+                return False
+        return True
+
     def runTransition(self, transition, graphState):
         transitionIndex = self.getTransitions().index(transition)
         incidenceColumn = self.incidenceMatrix[:, transitionIndex]
@@ -228,9 +238,8 @@ tArgs = sys.argv
 if len(tArgs) == 2:
     file = tArgs[1]
 else:
-    # input("Error: No input file provided. Press ENTER to exit...")
-    # sys.exit(0)
-    file = r"F:\School\FEI\DUS\siete\dus_zapocet1_10_siet_graf_dosiahnutelnosti.xml"
+    input("Error: No input file provided. Press ENTER to exit...")
+    sys.exit(0)
 
 if os.path.exists(file) and os.path.isfile(file):
     print("Parsing file:", file)
@@ -349,14 +358,17 @@ net.incidenceMatrix = incidenceMatrix
 
 
 # build reachability graph
-f = open("reachability_graph.txt", "w")
+grapheditor_input_filename = "grapheditor_input.txt"
+grapheditor_output_markup_filename = "grapheditor_markup_output.txt"
+
 G = nx.DiGraph()
-
-graph = reachability_graph.Graph()
+graph = petrigraph.Graph()
 baseNode = graph.addNode(net.getGraphState())
-
 G.add_node(baseNode.getName())
 
+grapheditor_input_file = open(grapheditor_input_filename, "w")
+
+isInfinite = False
 while True:
     allChecked = True
     for curNode in graph.nodes:
@@ -364,7 +376,7 @@ while True:
             allChecked = False
             break
 
-    if allChecked:
+    if allChecked or isInfinite:
         break
 
     for curNode in graph.nodes:
@@ -372,35 +384,51 @@ while True:
             for trans in net.getTransitions():
                 if net.isTransitionRunnableFromState(trans, curNode.state):
                     newState = net.runTransition(trans, curNode.state)
-                    newNode = graph.getNodeWithState(newState) if graph.hasNodeWithState(newState) else graph.addNode(newState, curNode)
+
+                    if net.isState2GreaterThan1(curNode.state, newState):
+                        isInfinite = True
+                        break
+
+                    newNode = None
+                    if graph.hasNodeWithState(newState):
+                        newNode = graph.getNodeWithState(newState)
+                        newNode.mergePredcessorNodesFrom(curNode)
+                    else:
+                        newNode = graph.addNode(newState, curNode)
                     G.add_edge(curNode.getName(), newNode.getName(), edgeLabel=trans.getLabel())
-                    f.write(f"{curNode.getName()} {newNode.getName()} {trans.getLabel()}\n")
+
+                    # write node/edge data for graph editor input
+                    grapheditor_input_file.write(f"{curNode.getName()} {newNode.getName()} {trans.getLabel()}\n")
             curNode.isChecked = True
-f.close()
+grapheditor_input_file.close()
 
-print("Open 'reachability_graph.txt' and copy the data into https://csacademy.com/app/graph_editor/")
-print("Config -> Run Command -> Arrange as tree, then arrange the graph as needed")
-print("Generate Markup, copy the data into 'graph_markup_input.txt and save it, then press ENTER to continue'")
-input("\nAfter writing data to the file, press ENTER to continue...")
+if not isInfinite:
+    print("\n Reachability graph tutorial:")
+    print("Go to https://csacademy.com/app/graph_editor/ and change the graph options to Directed with Custom Labels")
+    print(f"Open '{grapheditor_input_filename}' and copy the graph data into the graph editor")
+    print("Config -> Run Command -> Arrange as tree, then arrange the graph as needed")
+    print(f"Generate Markup, copy the generated markup data into '{grapheditor_output_markup_filename}' and save it")
+    input("\nAfter writing data to the file, press ENTER to continue...")
+
+    color_map = []
+    for node in G:
+        if len(color_map) == 0:
+            color_map.append('lightgreen')
+        else:
+            color_map.append('lightblue')
 
 
-color_map = []
-for node in G:
-    if len(color_map) == 0:
-        color_map.append('lightgreen')
-    else:
-        color_map.append('lightblue')
+    print("\nPlotting Reachability Graph...")
+    params = {"with_labels": True, "arrows": True, "node_color": color_map, "node_size": 6000, "labels": graph.buildNodeLabelDict()}
+    pos = markup_parser.parseDictFromFile(grapheditor_output_markup_filename)
 
+    plt.title("Reachability Graph")
+    nx.draw(G, pos, **params)
+    labels = nx.get_edge_attributes(G, "edgeLabel")
+    formatted_edge_labels = {(elem[0], elem[1]): labels[elem] for elem in labels}
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=formatted_edge_labels)
+    plt.show()
+else:
+    print("\nReachability graph is infinite, can't plot.")
 
-print("Plotting Reachability Graph...")
-params = {"with_labels": True, "arrows": True, "node_color": color_map, "node_size": 6000, "labels": graph.buildNodeLabelDict()}
-pos = markup_parser.parseDictFromFile("graph_markup_input.txt")
-
-plt.title("Reachability Graph")
-nx.draw(G, pos, **params)
-labels = nx.get_edge_attributes(G, "edgeLabel")
-formatted_edge_labels = {(elem[0], elem[1]): labels[elem] for elem in labels}
-nx.draw_networkx_edge_labels(G, pos, edge_labels=formatted_edge_labels)
-plt.show()
-
-# input("\nFinished, press ENTER to exit...")
+input("\nFinished, press ENTER to exit...")
