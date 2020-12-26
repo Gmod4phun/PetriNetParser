@@ -380,13 +380,18 @@ while True:
         break
 
     for curNode in graph.nodes:
+        if isInfinite:
+            break
         if not curNode.isChecked:
             for trans in net.getTransitions():
                 if net.isTransitionRunnableFromState(trans, curNode.state):
                     newState = net.runTransition(trans, curNode.state)
 
-                    if net.isState2GreaterThan1(curNode.state, newState):
-                        isInfinite = True
+                    for cycleNode in graph.nodes:
+                        if net.isState2GreaterThan1(cycleNode.state, newState):
+                            isInfinite = True
+                            break
+                    if isInfinite:
                         break
 
                     newNode = None
