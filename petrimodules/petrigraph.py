@@ -70,6 +70,18 @@ class Graph:
                 return node
         return None
 
+    def hasNodeWithName(self, name):
+        for node in self.nodes:
+            if node.getName() == name:
+                return True
+        return False
+
+    def getNodeWithName(self, name):
+        for node in self.nodes:
+            if node.getName() == name:
+                return node
+        return None
+
     def buildNodeLabelDict(self):
         data = {}
         for node in self.nodes:

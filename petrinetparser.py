@@ -6,13 +6,36 @@
 
 import numpy as np
 import networkx as nx
-import matplotlib.pyplot as plt
+from pyvis import network as pvnet
 
 import xml.etree.ElementTree as et
 import sys
 import os.path
 
-from petrimodules import petrigraph, markup_parser
+from petrimodules import petrigraph
+
+
+# functions
+def getPyvisOptions():
+    opts = '''
+        var options = {
+          "physics": {
+            "enabled": false
+          },
+          "interaction": {
+            "dragNodes": true,
+            "hideEdgesOnDrag": false,
+            "hideNodesOnDrag": false
+        },
+        "edges": {
+            "smooth": {
+                "enabled": true,
+                "type": "continuous"
+            }
+        }
+        }
+    '''
+    return opts
 
 
 # classes
@@ -127,15 +150,15 @@ class Net:
                 return obj
         return None
 
-    # def sortObjectsByLabel(self, arr):
-    #     n = len(arr)
-    #     for i in range(n - 1):
-    #         for j in range(0, n - i - 1):
-    #             if arr[j].getLabel() > arr[j + 1].getLabel():
-    #                 arr[j], arr[j + 1] = arr[j + 1], arr[j]
-
     def sortObjectsByLabel(self, arr):
-        arr = sorted(arr, key=lambda item: item.getLabel(), reverse=True)
+        n = len(arr)
+        for i in range(n - 1):
+            for j in range(0, n - i - 1):
+                if arr[j].getLabel() > arr[j + 1].getLabel():
+                    arr[j], arr[j + 1] = arr[j + 1], arr[j]
+
+    # def sortObjectsByLabel(self, arr):
+    #     arr = sorted(arr, key=lambda item: item.getLabel(), reverse=True)
 
     def sortPlacesByPattern(self, pattern):
         newObjects = []
@@ -352,22 +375,20 @@ print(outputMatrix)
 print("\nIncidence matrix C = O - I:")
 print(incidenceMatrix)
 
+# set matrices attributes for the net itself
 net.inputMatrix = inputMatrix
 net.outputMatrix = outputMatrix
 net.incidenceMatrix = incidenceMatrix
 
 
 # build reachability graph
-grapheditor_input_filename = "grapheditor_input.txt"
-grapheditor_output_markup_filename = "grapheditor_markup_output.txt"
-
-G = nx.DiGraph()
+# add first node manually
+G = nx.MultiDiGraph()
 graph = petrigraph.Graph()
 baseNode = graph.addNode(net.getGraphState())
 G.add_node(baseNode.getName())
 
-grapheditor_input_file = open(grapheditor_input_filename, "w")
-
+# add the rest automatically
 isInfinite = False
 while True:
     allChecked = True
@@ -400,39 +421,39 @@ while True:
                         newNode.mergePredcessorNodesFrom(curNode)
                     else:
                         newNode = graph.addNode(newState, curNode)
-                    G.add_edge(curNode.getName(), newNode.getName(), edgeLabel=trans.getLabel())
+                        # G.add_node(newNode.getName())
 
-                    # write node/edge data for graph editor input
-                    grapheditor_input_file.write(f"{curNode.getName()} {newNode.getName()} {trans.getLabel()}\n")
+                    G.add_edge(curNode.getName(), newNode.getName(), label=trans.getLabel())
             curNode.isChecked = True
-grapheditor_input_file.close()
 
 if not isInfinite:
-    print("\n Reachability graph tutorial:")
-    print("Go to https://csacademy.com/app/graph_editor/ and change the graph options to Directed with Custom Labels")
-    print(f"Open '{grapheditor_input_filename}' and copy the graph data into the graph editor")
-    print("Config -> Run Command -> Arrange as tree, then arrange the graph as needed")
-    print(f"Generate Markup, copy the generated markup data into '{grapheditor_output_markup_filename}' and save it")
-    input("\nAfter writing data to the file, press ENTER to continue...")
-
-    color_map = []
-    for node in G:
-        if len(color_map) == 0:
-            color_map.append('lightgreen')
-        else:
-            color_map.append('lightblue')
-
-
     print("\nPlotting Reachability Graph...")
-    params = {"with_labels": True, "arrows": True, "node_color": color_map, "node_size": 6000, "labels": graph.buildNodeLabelDict()}
-    pos = markup_parser.parseDictFromFile(grapheditor_output_markup_filename)
 
-    plt.title("Reachability Graph")
-    nx.draw(G, pos, **params)
-    labels = nx.get_edge_attributes(G, "edgeLabel")
-    formatted_edge_labels = {(elem[0], elem[1]): labels[elem] for elem in labels}
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=formatted_edge_labels)
-    plt.show()
+    reachability_graph = pvnet.Network(directed=True, width="1900px", height="900px", heading="Reachability graph")
+    for node in G.nodes():
+        nodeData = graph.getNodeWithName(node)
+        nodeName = nodeData.getName()
+        nodeLabel = nodeData.getGraphLabel()
+        nodeColor = "lightgreen" if nodeName == "m0" else None
+        reachability_graph.add_node(nodeName, label=nodeLabel, shape="box", color=nodeColor, title=nodeName)
+
+    edgeDict = dict()
+    for edge in G.edges(data=True):
+        edgeLabel = edge[2]["label"]
+        entryName = edge[0] + " " + edge[1]
+        if entryName not in edgeDict.keys():
+            edgeDict[entryName] = edgeLabel
+        else:
+            edgeDict[entryName] = edgeDict[entryName] + ", " + edgeLabel
+
+    for nodeData, edgeLabel in edgeDict.items():
+        nodes = nodeData.split(" ")
+        srcNode = nodes[0]
+        dstNode = nodes[1]
+        reachability_graph.add_edge(srcNode, dstNode, label=edgeLabel, color="black", title=edgeLabel)
+
+    reachability_graph.set_options(getPyvisOptions())
+    reachability_graph.save_graph("reachability_graph.html")
 else:
     print("\nReachability graph is infinite, can't plot.")
 
