@@ -6,6 +6,7 @@ class Node:
         self.predcessorNode = predcessorNode
         self.predcessors = self.setupAllPredcessorNodes()
         self.isChecked = False
+        self.designationChar = "m"
 
     def getPredcessorNode(self):
         return self.predcessorNode
@@ -23,7 +24,7 @@ class Node:
         return self.predcessors
 
     def getName(self):
-        return f"m{self.id}"
+        return f"{self.designationChar}{self.id}"
 
     def getAllPredcessorNames(self):
         allNames = []
@@ -42,6 +43,9 @@ class Node:
 
     def getGraphLabel(self):
         return f"{self.getName()}\n{self.state}\n({self.getAllPredcessorNames()})"
+
+    def getGraphLabelCustomState(self, customstate):
+        return f"{self.getName()}\n{customstate}\n({self.getAllPredcessorNames()})"
 
     def __str__(self):
         return f"{self.getName()} | {self.state} | ({self.getAllPredcessorNames()})"
