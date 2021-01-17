@@ -8,8 +8,7 @@
 # default packages
 import xml.etree.ElementTree as et
 import sys
-import os, os.path
-import ctypes
+import os.path
 
 
 # custom packages
@@ -31,12 +30,6 @@ CONST_OMEGA_CHAR = "ω"
 NODECOLOR_FIRST = "#7FFF8C"
 NODECOLOR_GENERIC = "#8CCFFF"
 NODECOLOR_LAST = "#FFC97F"
-
-user32 = ctypes.windll.user32
-SCR_W = user32.GetSystemMetrics(0)
-SCR_H = user32.GetSystemMetrics(1)
-PYVISGRAPH_W = SCR_W * 0.9875
-PYVISGRAPH_H = SCR_H * 0.82
 
 
 # functions
@@ -60,6 +53,16 @@ def getPyvisOptions():
         }
     '''
     return opts
+
+
+def calcGraphResolution():
+    # screen resolution (for html graph size)
+    scrw_in = input("Your screen width (leave empty for default 1920): ")
+    scrh_in = input("Your screen height (leave empty for default 1080): ")
+    SCR_W = 1920 if scrw_in == "" else int(scrw_in)
+    SCR_H = 1080 if scrh_in == "" else int(scrh_in)
+    print(f"Screen resolution: {SCR_W}x{SCR_H}\n")
+    return SCR_W * 0.9875, SCR_H * 0.82
 
 
 # classes
@@ -373,6 +376,8 @@ if os.path.exists(file) and os.path.isfile(file):
 else:
     input("Error: Can't load file. Press ENTER to exit...")
     sys.exit(-1)
+
+PYVISGRAPH_W, PYVISGRAPH_H = calcGraphResolution()
 
 tree = et.parse(file)
 root = tree.getroot()
