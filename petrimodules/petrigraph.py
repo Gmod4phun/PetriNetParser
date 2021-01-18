@@ -44,8 +44,8 @@ class Node:
     def getGraphLabel(self):
         return f"{self.getName()}\n{self.state}\n({self.getAllPredcessorNames()})"
 
-    def getGraphLabelCustomState(self, customstate):
-        return f"{self.getName()}\n{customstate}\n({self.getAllPredcessorNames()})"
+    def getGraphLabelCustom(self, customstate, custompredcessors):
+        return f"{self.getName()}\n{customstate}\n({custompredcessors})"
 
     def __str__(self):
         return f"{self.getName()} | {self.state} | ({self.getAllPredcessorNames()})"

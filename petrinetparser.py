@@ -358,6 +358,79 @@ class Net:
                 edgeDict[entryName] = edgeDict[entryName] + ", " + edgeLabel
         return edgeDict
 
+    def updateMultiEdgesForPyvisgraph(self, graph):
+        edgeDict = dict()
+        for edge in graph.get_edges():
+            edgeLabel = edge["label"]
+            entryName = edge["from"] + " " + edge["to"]
+            if entryName not in edgeDict.keys():
+                edgeDict[entryName] = edgeLabel
+            else:
+                edgeDict[entryName] = edgeDict[entryName] + ", " + edgeLabel
+        # delete old edges, add new ones
+        graph.edges = []
+        for key, value in edgeDict.items():
+            nodeData = key.split(" ")
+            nodeFrom = nodeData[0]
+            nodeTo = nodeData[1]
+            edgeLabel = value
+            graph.add_edge(nodeFrom, nodeTo, label=edgeLabel, color="black", title=edgeLabel)
+
+    def printTransitionPreset(self, transition):
+        transitionIndex = self.getTransitions().index(transition)
+        inputColumn = self.inputMatrix[:, transitionIndex]
+
+        placeList = []
+        for place in self.getPlaces():
+            placeIndex = self.getPlaces().index(place)
+            if inputColumn[placeIndex] > 0:
+                placeList.append(place.getLabel())
+        print("•", transition.getLabel(), end=" = {", sep="")
+        print(", ".join(placeList), end="}\n")
+
+    def printTransitionPostset(self, transition):
+        transitionIndex = self.getTransitions().index(transition)
+        inputColumn = self.outputMatrix[:, transitionIndex]
+
+        placeList = []
+        for place in self.getPlaces():
+            placeIndex = self.getPlaces().index(place)
+            if inputColumn[placeIndex] > 0:
+                placeList.append(place.getLabel())
+        print(transition.getLabel(), "•", end=" = {", sep="")
+        print(", ".join(placeList), end="}\n")
+
+    def printAllTransitionsPresets(self):
+        print("\nTransitions presets:")
+        for t in self.getTransitions():
+            self.printTransitionPreset(t)
+
+    def printAllTransitionsPostsets(self):
+        print("\nTransitions postsets:")
+        for t in self.getTransitions():
+            self.printTransitionPostset(t)
+
+    def getLeafNodesFromGraph(self, graph):
+        nodesWithoutSuccessors = []
+        for node in graph.nodes():
+            successorCount = 0
+            for _ in graph.successors(node):
+                successorCount += 1
+            if successorCount == 0:
+                nodesWithoutSuccessors.append(node)
+        return nodesWithoutSuccessors
+
+    def getGraphStatesOccurenceCount(self, graph, petrigraph):
+        nodeStates = dict()
+        for node in graph.nodes():
+            nodeData = petrigraph.getNodeWithName(node)
+            nodeState = str(nodeData.state)
+            if nodeState not in nodeStates:
+                nodeStates[nodeState] = 1
+            else:
+                nodeStates[nodeState] += 1
+        return nodeStates
+
 
 # program
 
@@ -473,21 +546,24 @@ for arc in petri_net.getArcs():
 # calculate incidence matrix
 incidenceMatrix = outputMatrix - inputMatrix
 
-# print info
-print("\nInput matrix I:")
-print(inputMatrix)
-
-print("\nOutput matrix O:")
-print(outputMatrix)
-
-print("\nIncidence matrix C = O - I:")
-print(incidenceMatrix)
-
 # set matrices attributes for the net itself
 petri_net.inputMatrix = inputMatrix
 petri_net.outputMatrix = outputMatrix
 petri_net.incidenceMatrix = incidenceMatrix
 
+# print info
+print("\nInput matrix I:")
+print(petri_net.inputMatrix)
+
+print("\nOutput matrix O:")
+print(petri_net.outputMatrix)
+
+print("\nIncidence matrix C = O - I:")
+print(petri_net.incidenceMatrix)
+
+# transition preset/postset
+petri_net.printAllTransitionsPresets()
+petri_net.printAllTransitionsPostsets()
 
 # REACHABILITY GRAPH
 # build reachability graph
@@ -539,7 +615,7 @@ while True:
 
 # if the graph is infinite, we cant create it, otherwise we can
 if not isInfinite:
-    print("\nPlotting Reachability Graph...")
+    print("\nPlotting Reachability Graphs...")
 
     reach_pyvisgraph = pvnet.Network(directed=True, width=PYVISGRAPH_W, height=PYVISGRAPH_H, heading="Reachability graph")
     reach_pyvisgraph_workflow = pvnet.Network(directed=True, width=PYVISGRAPH_W, height=PYVISGRAPH_H, heading="Reachability graph (Workflow)")
@@ -547,11 +623,14 @@ if not isInfinite:
         nodeData = reach_petrigraph.getNodeWithName(node)
         nodeName = nodeData.getName()
         nodeLabel = nodeData.getGraphLabel()
-        nodeLabelWorkflow = nodeData.getGraphLabelCustomState(petri_net.getWorkflowStateFromState(nodeData.state))
         nodeColor = NODECOLOR_FIRST if node == list(reach_nxgraph.nodes())[0] else NODECOLOR_GENERIC
         nodeColor = NODECOLOR_LAST if node == list(reach_nxgraph.nodes())[-1] else nodeColor
         reach_pyvisgraph.add_node(nodeName, label=nodeLabel, shape="box", color=nodeColor, title=nodeName)
-        reach_pyvisgraph_workflow.add_node(nodeName, label=nodeLabelWorkflow, shape="box", color=nodeColor, title=nodeName)
+        # label for workflow graph (place names (but no static places), and no predcessors to reduce visual clutter)
+        # predcessors are still available upon mouse hover over node
+        nodeLabelWorkflow = nodeData.getGraphLabelCustom(petri_net.getWorkflowStateFromState(nodeData.state), "")
+        nodeTitleWorkflow = "Predcessors: " + " ".join(nodeData.getAllPredcessorNames())
+        reach_pyvisgraph_workflow.add_node(nodeName, label=nodeLabelWorkflow, shape="box", color=nodeColor, title=nodeTitleWorkflow)
 
     for nodeData, edgeLabel in petri_net.createEdgeDictFromGraph(reach_nxgraph).items():
         nodes = nodeData.split(" ")
@@ -622,9 +701,10 @@ while True:
             curNode.isChecked = True
 
 
-print("\nPlotting Coverability Tree...")
+print("\nPlotting Coverability Tree and Coverability Graph...")
 
 cover_pyvistree = pvnet.Network(directed=True, width=PYVISGRAPH_W, height=PYVISGRAPH_H, heading="Coverability tree")
+cover_pyvisgraph = pvnet.Network(directed=True, width=PYVISGRAPH_W, height=PYVISGRAPH_H, heading="Coverability graph")
 for node in cover_nxtree.nodes():
     nodeData = cover_petritree.getNodeWithName(node)
     nodeName = nodeData.getName()
@@ -632,15 +712,62 @@ for node in cover_nxtree.nodes():
     nodeColor = NODECOLOR_FIRST if node == list(cover_nxtree.nodes())[0] else NODECOLOR_GENERIC
     nodeColor = NODECOLOR_LAST if node == list(cover_nxtree.nodes())[-1] else nodeColor
     cover_pyvistree.add_node(nodeName, label=nodeLabel, shape="box", color=nodeColor, title=nodeName)
+    cover_pyvisgraph.add_node(nodeName, label=nodeLabel, shape="box", color=nodeColor, title=nodeName)
 
 for nodeData, edgeLabel in petri_net.createEdgeDictFromGraph(cover_nxtree).items():
     nodes = nodeData.split(" ")
     cover_pyvistree.add_edge(nodes[0], nodes[1], label=edgeLabel, color="black", title=edgeLabel)
+    cover_pyvisgraph.add_edge(nodes[0], nodes[1], label=edgeLabel, color="black", title=edgeLabel)
 
 filename_covertree = "coverability_tree.html"
 print(f"Saving the result to '{filename_covertree}'")
 cover_pyvistree.set_options(getPyvisOptions())
 cover_pyvistree.save_graph(filename_covertree)
 
+# COVERABILITY GRAPH
+nodeStates = petri_net.getGraphStatesOccurenceCount(cover_nxtree, cover_petritree)
+nodeMergeDict = dict()
+for node in reversed(petri_net.getLeafNodesFromGraph(cover_nxtree)):
+    nodeData = cover_petritree.getNodeWithName(node)
+    nodeState = str(nodeData.state)
+    # if there is more than 1 node with this state, we will merge them
+    if nodeState in nodeStates.keys() and nodeStates[nodeState] > 1:
+        # take this node and find the first node in graph with the same state
+        for cycleNode in cover_nxtree.nodes():
+            cycleNodeData = cover_petritree.getNodeWithName(cycleNode)
+            cycleNodeState = str(cycleNodeData.state)
+            # if we found a node with same state, but only if it isn't the same node (aka don't merge to itself)
+            # if it's the same node, break and move on without doing anything
+            if cycleNodeState == nodeState and cycleNode == node:
+                break
+            if cycleNodeState == nodeState:
+                nodeMergeDict[node] = cycleNode
+                break
+
+# reroute the edges from old nodes to new nodes
+nodesToRemove = []
+for oldNode, newNode in nodeMergeDict.items():
+    for edge in cover_pyvisgraph.get_edges():
+        nodeTo = edge["to"]
+        if oldNode == nodeTo:
+            edge["to"] = newNode
+            nodesToRemove.append(nodeTo)
+
+# remove the old nodes
+newNodes = []
+for node in cover_pyvisgraph.nodes:
+    if node["id"] not in nodesToRemove:
+        nodeLabel = node["label"].split("\n")[1]
+        nodeLabel = "\n"+nodeLabel+"\n"
+        node["label"] = nodeLabel
+        newNodes.append(node)
+cover_pyvisgraph.nodes = newNodes
+
+petri_net.updateMultiEdgesForPyvisgraph(cover_pyvisgraph)
+
+filename_covergraph = "coverability_graph.html"
+print(f"Saving the result to '{filename_covergraph}'")
+cover_pyvisgraph.set_options(getPyvisOptions())
+cover_pyvisgraph.save_graph(filename_covergraph)
 
 input("\nFinished, press ENTER to exit...")
