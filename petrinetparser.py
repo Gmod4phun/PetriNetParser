@@ -656,7 +656,54 @@ else:
 ------------------------------------------------------------------
 -------------------------------------------------------------- '''
 
-# COVERABILITY TREE
+# COVERABILITY TREE (old one, needed for coverability graph) (refactor this some day :P)
+# build coverability tree (old)
+cover_nxtree_old = nx.MultiDiGraph()
+cover_petritree_old = petrigraph.Graph()
+
+# add first node manually
+baseNode = cover_petritree_old.addNode(petri_net.getGraphState())
+baseNode.designationChar = "v"
+cover_nxtree_old.add_node(baseNode.getName())
+
+while True:
+    allChecked = True
+    for curNode in cover_petritree_old.nodes:
+        if not curNode.isChecked:
+            allChecked = False
+            break
+
+    # if all nodes are checked, stop
+    if allChecked:
+        break
+
+    for curNode in cover_petritree_old.nodes:
+        if not curNode.isChecked:
+            for trans in petri_net.getTransitions():
+                if petri_net.isTransitionRunnableFromState_Omega(trans, curNode.state):
+                    newState = petri_net.runTransition_Omega(trans, curNode.state)
+
+                    for cycleNode in cover_petritree_old.nodes:
+                        if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
+                            newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
+                            break
+
+                    newNode = None
+                    if cover_petritree_old.hasNodeWithState(newState):
+                        newNode = cover_petritree_old.addNode(newState, curNode)
+                        newNode.isChecked = True
+                    else:
+                        newNode = cover_petritree_old.addNode(newState, curNode)
+
+                    newNode.designationChar = "v"
+
+                    cover_nxtree_old.add_edge(curNode.getName(), newNode.getName(), label=trans.getLabel())
+            curNode.isChecked = True
+
+
+# new coverability tree
+
+# COVERABILITY TREE (new, good)
 # build coverability tree
 cover_nxtree = nx.MultiDiGraph()
 cover_petritree = petrigraph.Graph()
@@ -688,23 +735,21 @@ while True:
                             newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
                             break
 
-                    newNode = None
-                    if cover_petritree.hasNodeWithState(newState):
-                        newNode = cover_petritree.addNode(newState, curNode)
-                        newNode.isChecked = True
-                    else:
-                        newNode = cover_petritree.addNode(newState, curNode)
-
+                    newNode = cover_petritree.addNode(newState, curNode)
                     newNode.designationChar = "v"
+
+                    for cycleNode in cover_petritree.nodes:
+                        if cycleNode.getName() in newNode.getAllPredcessorNames():
+                            if cycleNode.state == newNode.state:
+                                newNode.isChecked = True
+                                break
 
                     cover_nxtree.add_edge(curNode.getName(), newNode.getName(), label=trans.getLabel())
             curNode.isChecked = True
 
 
-print("\nPlotting Coverability Tree and Coverability Graph...")
-
+print("\nPlotting Coverability Tree...")
 cover_pyvistree = pvnet.Network(directed=True, width=PYVISGRAPH_W, height=PYVISGRAPH_H, heading="Coverability tree")
-cover_pyvisgraph = pvnet.Network(directed=True, width=PYVISGRAPH_W, height=PYVISGRAPH_H, heading="Coverability graph")
 for node in cover_nxtree.nodes():
     nodeData = cover_petritree.getNodeWithName(node)
     nodeName = nodeData.getName()
@@ -712,29 +757,43 @@ for node in cover_nxtree.nodes():
     nodeColor = NODECOLOR_FIRST if node == list(cover_nxtree.nodes())[0] else NODECOLOR_GENERIC
     nodeColor = NODECOLOR_LAST if node == list(cover_nxtree.nodes())[-1] else nodeColor
     cover_pyvistree.add_node(nodeName, label=nodeLabel, shape="box", color=nodeColor, title=nodeName)
-    cover_pyvisgraph.add_node(nodeName, label=nodeLabel, shape="box", color=nodeColor, title=nodeName)
 
 for nodeData, edgeLabel in petri_net.createEdgeDictFromGraph(cover_nxtree).items():
     nodes = nodeData.split(" ")
     cover_pyvistree.add_edge(nodes[0], nodes[1], label=edgeLabel, color="black", title=edgeLabel)
-    cover_pyvisgraph.add_edge(nodes[0], nodes[1], label=edgeLabel, color="black", title=edgeLabel)
 
 filename_covertree = "coverability_tree.html"
 print(f"Saving the result to '{filename_covertree}'")
 cover_pyvistree.set_options(getPyvisOptions())
 cover_pyvistree.save_graph(filename_covertree)
 
+
 # COVERABILITY GRAPH
-nodeStates = petri_net.getGraphStatesOccurenceCount(cover_nxtree, cover_petritree)
+print("\nPlotting Coverability Graph...")
+cover_pyvisgraph = pvnet.Network(directed=True, width=PYVISGRAPH_W, height=PYVISGRAPH_H, heading="Coverability graph")
+for node in cover_nxtree_old.nodes():
+    nodeData = cover_petritree_old.getNodeWithName(node)
+    nodeName = nodeData.getName()
+    nodeLabel = nodeData.getGraphLabel()
+    nodeColor = NODECOLOR_FIRST if node == list(cover_nxtree_old.nodes())[0] else NODECOLOR_GENERIC
+    nodeColor = NODECOLOR_LAST if node == list(cover_nxtree_old.nodes())[-1] else nodeColor
+    cover_pyvisgraph.add_node(nodeName, label=nodeLabel, shape="box", color=nodeColor, title=nodeName)
+
+for nodeData, edgeLabel in petri_net.createEdgeDictFromGraph(cover_nxtree_old).items():
+    nodes = nodeData.split(" ")
+    cover_pyvisgraph.add_edge(nodes[0], nodes[1], label=edgeLabel, color="black", title=edgeLabel)
+
+# edit old coverability tree to make coverability graph
+nodeStates = petri_net.getGraphStatesOccurenceCount(cover_nxtree_old, cover_petritree_old)
 nodeMergeDict = dict()
-for node in reversed(petri_net.getLeafNodesFromGraph(cover_nxtree)):
-    nodeData = cover_petritree.getNodeWithName(node)
+for node in reversed(petri_net.getLeafNodesFromGraph(cover_nxtree_old)):
+    nodeData = cover_petritree_old.getNodeWithName(node)
     nodeState = str(nodeData.state)
     # if there is more than 1 node with this state, we will merge them
     if nodeState in nodeStates.keys() and nodeStates[nodeState] > 1:
         # take this node and find the first node in graph with the same state
-        for cycleNode in cover_nxtree.nodes():
-            cycleNodeData = cover_petritree.getNodeWithName(cycleNode)
+        for cycleNode in cover_nxtree_old.nodes():
+            cycleNodeData = cover_petritree_old.getNodeWithName(cycleNode)
             cycleNodeState = str(cycleNodeData.state)
             # if we found a node with same state, but only if it isn't the same node (aka don't merge to itself)
             # if it's the same node, break and move on without doing anything
