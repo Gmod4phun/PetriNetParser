@@ -561,7 +561,7 @@ print(petri_net.outputMatrix)
 print("\nIncidence matrix C = O - I:")
 print(petri_net.incidenceMatrix)
 
-# transition preset/postset
+# transition presets/postsets
 petri_net.printAllTransitionsPresets()
 petri_net.printAllTransitionsPostsets()
 
@@ -595,17 +595,21 @@ while True:
                 if petri_net.isTransitionRunnableFromState(trans, curNode.state):
                     newState = petri_net.runTransition(trans, curNode.state)
 
+                    curNodePredcessors = (curNode.getAllPredcessorNames() + [curNode.getName()])
                     for cycleNode in reach_petrigraph.nodes:
-                        if petri_net.isState2GreaterThan1(cycleNode.state, newState):
-                            isInfinite = True
-                            break
+                        # only check predcessors
+                        if cycleNode.getName() in curNodePredcessors:
+                            if petri_net.isState2GreaterThan1(cycleNode.state, newState):
+                                isInfinite = True
+                                break
                     if isInfinite:
                         break
 
                     newNode = None
                     if reach_petrigraph.hasNodeWithState(newState):
                         newNode = reach_petrigraph.getNodeWithState(newState)
-                        newNode.mergePredcessorNodesFrom(curNode)
+                        if newNode != curNode:
+                            newNode.mergePredcessorNodesFrom(curNode)
                     else:
                         newNode = reach_petrigraph.addNode(newState, curNode)
 
@@ -683,10 +687,13 @@ while True:
                 if petri_net.isTransitionRunnableFromState_Omega(trans, curNode.state):
                     newState = petri_net.runTransition_Omega(trans, curNode.state)
 
+                    curNodePredcessors = (curNode.getAllPredcessorNames() + [curNode.getName()])
                     for cycleNode in cover_petritree_old.nodes:
-                        if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
-                            newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
-                            break
+                        # only check predcessors
+                        if cycleNode.getName() in curNodePredcessors:
+                            if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
+                                newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
+                                break
 
                     newNode = None
                     if cover_petritree_old.hasNodeWithState(newState):
@@ -730,16 +737,22 @@ while True:
                 if petri_net.isTransitionRunnableFromState_Omega(trans, curNode.state):
                     newState = petri_net.runTransition_Omega(trans, curNode.state)
 
+                    curNodePredcessors = (curNode.getAllPredcessorNames() + [curNode.getName()])
                     for cycleNode in cover_petritree.nodes:
-                        if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
-                            newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
-                            break
+                        # only check predcessors
+                        if cycleNode.getName() in curNodePredcessors:
+                            # print(f"Node {curNode.getName()} with state {curNode.state}, transition {trans.getLabel()}, comparing new state {newState} with cyclestate {cycleNode.state}")
+                            if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
+                                newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
+                                # print(f"New state is greater, transforming to {newState}")
+                                break
 
                     newNode = cover_petritree.addNode(newState, curNode)
                     newNode.designationChar = "v"
 
+                    newNodePredcessors = newNode.getAllPredcessorNames()
                     for cycleNode in cover_petritree.nodes:
-                        if cycleNode.getName() in newNode.getAllPredcessorNames():
+                        if cycleNode.getName() in newNodePredcessors:
                             if cycleNode.state == newNode.state:
                                 newNode.isChecked = True
                                 break
@@ -819,6 +832,7 @@ for node in cover_pyvisgraph.nodes:
         nodeLabel = node["label"].split("\n")[1]
         nodeLabel = "\n"+nodeLabel+"\n"
         node["label"] = nodeLabel
+        node["title"] = nodeLabel
         newNodes.append(node)
 cover_pyvisgraph.nodes = newNodes
 
