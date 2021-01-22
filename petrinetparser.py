@@ -685,24 +685,27 @@ while True:
         if not curNode.isChecked:
             for trans in petri_net.getTransitions():
                 if petri_net.isTransitionRunnableFromState_Omega(trans, curNode.state):
+                    shouldSkip = False
                     newState = petri_net.runTransition_Omega(trans, curNode.state)
-
-                    curNodePredcessors = (curNode.getAllPredcessorNames() + [curNode.getName()])
-                    for cycleNode in cover_petritree_old.nodes:
-                        # only check predcessors
-                        if cycleNode.getName() in curNodePredcessors:
-                            if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
-                                newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
-                                break
 
                     newNode = None
                     if cover_petritree_old.hasNodeWithState(newState):
                         newNode = cover_petritree_old.addNode(newState, curNode)
                         newNode.isChecked = True
+                        shouldSkip = True
                     else:
                         newNode = cover_petritree_old.addNode(newState, curNode)
 
                     newNode.designationChar = "v"
+
+                    if not shouldSkip:
+                        curNodePredcessors = (curNode.getAllPredcessorNames() + [curNode.getName()])
+                        for cycleNode in cover_petritree_old.nodes:
+                            # only check predcessors
+                            if cycleNode.getName() in curNodePredcessors:
+                                if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
+                                    newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
+                                    # break # dont stop at first valid node, check all
 
                     cover_nxtree_old.add_edge(curNode.getName(), newNode.getName(), label=trans.getLabel())
             curNode.isChecked = True
@@ -735,17 +738,8 @@ while True:
         if not curNode.isChecked:
             for trans in petri_net.getTransitions():
                 if petri_net.isTransitionRunnableFromState_Omega(trans, curNode.state):
+                    shouldSkip = False
                     newState = petri_net.runTransition_Omega(trans, curNode.state)
-
-                    curNodePredcessors = (curNode.getAllPredcessorNames() + [curNode.getName()])
-                    for cycleNode in cover_petritree.nodes:
-                        # only check predcessors
-                        if cycleNode.getName() in curNodePredcessors:
-                            # print(f"Node {curNode.getName()} with state {curNode.state}, transition {trans.getLabel()}, comparing new state {newState} with cyclestate {cycleNode.state}")
-                            if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
-                                newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
-                                # print(f"New state is greater, transforming to {newState}")
-                                break
 
                     newNode = cover_petritree.addNode(newState, curNode)
                     newNode.designationChar = "v"
@@ -755,7 +749,20 @@ while True:
                         if cycleNode.getName() in newNodePredcessors:
                             if cycleNode.state == newNode.state:
                                 newNode.isChecked = True
+                                shouldSkip = True
                                 break
+
+                    if not shouldSkip:
+                        curNodePredcessors = (curNode.getAllPredcessorNames() + [curNode.getName()])
+                        for cycleNode in cover_petritree.nodes:
+                            # only check predcessors
+                            if cycleNode.getName() in curNodePredcessors:
+                                # print(f"Node {curNode.getName()} with state {curNode.state}, transition {trans.getLabel()}, comparing new state {newState} with cyclestate {cycleNode.state}")
+                                if petri_net.isState2GreaterThan1_Omega(cycleNode.state, newState):
+                                    newState = petri_net.transformState2ToOmega(cycleNode.state, newState)
+                                    # print(f"New state is greater, transforming to {newState}")
+                                    # break # dont stop at first valid node, check all
+                        newNode.state = newState
 
                     cover_nxtree.add_edge(curNode.getName(), newNode.getName(), label=trans.getLabel())
             curNode.isChecked = True
@@ -799,7 +806,8 @@ for nodeData, edgeLabel in petri_net.createEdgeDictFromGraph(cover_nxtree_old).i
 # edit old coverability tree to make coverability graph
 nodeStates = petri_net.getGraphStatesOccurenceCount(cover_nxtree_old, cover_petritree_old)
 nodeMergeDict = dict()
-for node in reversed(petri_net.getLeafNodesFromGraph(cover_nxtree_old)):
+# for node in reversed(petri_net.getLeafNodesFromGraph(cover_nxtree_old)):
+for node in reversed(list(cover_nxtree_old.nodes())): # traverse all nodes, not just leaf nodes :P
     nodeData = cover_petritree_old.getNodeWithName(node)
     nodeState = str(nodeData.state)
     # if there is more than 1 node with this state, we will merge them
